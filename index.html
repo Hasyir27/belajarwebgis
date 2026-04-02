@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>WebGIS Administrasi Palembang</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- LEAFLET -->
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; }
+    #map { height: 100vh; }
+
+    .leaflet-control {
+      font-size: 14px;
+    }
+
+    .legend {
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+  </style>
+
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+  // ================= MAP =================
+  var map = L.map('map', {
+    zoomControl: false
+  }).setView([-2.99, 104.76], 12);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  // ================= BASEMAP =================
+  var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
+  var satellite = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {
+    attribution: 'Tiles © Esri'
+  });
+  var topo = L.tileLayer(
+  'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+  {
+    attribution: '&copy; OpenTopoMap'
+  });
+
+  osm.addTo(map);
+
+  Promise.all([
+  fetch('kota.geojson').then(res => res.json()),
+  fetch('kecamatan.geojson').then(res => res.json()),
+  fetch('kelurahan.geojson').then(res => res.json()),
+  fetch('jalan.geojson').then(res => res.json()),
+  fetch('sungai.geojson').then(res => res.json()),
+  fetch('sungai_polygon.geojson').then(res => res.json())
+]).then(([kotaData, kecData, kelData, jalanData, sungaiData, sungaiPolyData]) => {
+
+  // ================= BUAT LAYER =================
+  kotaLayer = L.geoJSON(kotaData, {
+    style: { color: "black", weight: 3, fillOpacity: 0 }
+  });
+
+  kecamatanLayer = L.geoJSON(kecData, {
+    style: { color: "orange", weight: 2, fillOpacity: 0.1 },
+    onEachFeature: (f,l) => l.bindPopup("<b>Kecamatan:</b> " + f.properties.NAMOBJ)
+  });
+
+  kelurahanLayer = L.geoJSON(kelData, {
+    style: { color: "blue", weight: 1, fillOpacity: 0.05 },
+    onEachFeature: (f,l) => l.bindPopup("<b>Kelurahan:</b> " + f.properties.NAMOBJ)
+  });
+
+  jalanLayer = L.geoJSON(jalanData, {
+    style: { color: "gray", weight: 2 }
+  });
+
+  sungaiLayer = L.geoJSON(sungaiData, {
+    style: { color: "blue", weight: 2 }
+  });
+
+  sungaipolygonLayer = L.geoJSON(sungaiPolyData, {
+    style: {
+      color: "blue",
+      weight: 1,
+      fillColor: "blue",
+      fillOpacity: 0.3
+    }
+  });
+
+  // ================= GABUNG SUNGAI =================
+  var sungaiGroup = L.layerGroup([
+    sungaiLayer,
+    sungaipolygonLayer
+  ]);
+
+  // ================= TAMBAH KE MAP =================
+  kotaLayer.addTo(map);
+  kecamatanLayer.addTo(map);
+  sungaiGroup.addTo(map);
+
+  // ================= LAYER CONTROL =================
+  L.control.layers(
+    {"OpenStreetMap": osm,
+    "Satellite": satellite,
+    "Topographic": topo},
+    {
+      "Kota": kotaLayer,
+      "Kecamatan": kecamatanLayer,
+      "Kelurahan": kelurahanLayer,
+      "Jalan": jalanLayer,
+      "Sungai": sungaiGroup
+    }
+  ).addTo(map);
+
+  // ================= AUTO ZOOM =================
+  var group = new L.featureGroup([kotaLayer, kecamatanLayer]);
+  map.fitBounds(group.getBounds());
+
+});
+
+map.on('zoomend', function () {
+  var zoom = map.getZoom();
+
+  if (zoom >= 14) {
+    if (!map.hasLayer(jalanLayer)) map.addLayer(jalanLayer);
+    if (!map.hasLayer(sungaiLayer)) map.addLayer(sungaiLayer);
+  } else {
+    if (map.hasLayer(jalanLayer)) map.removeLayer(jalanLayer);
+    if (map.hasLayer(sungaiLayer)) map.removeLayer(sungaiLayer);
+  }
+});
+
+  // ================= LEGEND =================
+  var legend = L.control({ position: 'bottomright' });
+
+  legend.onAdd = function () {
+    var div = L.DomUtil.create('div', 'legend');
+
+    div.innerHTML = `
+      <b>Legenda</b><br><br>
+      <i style="background:black;width:15px;height:3px;display:inline-block"></i> Kota<br>
+      <i style="background:orange;width:15px;height:3px;display:inline-block"></i> Kecamatan<br>
+      <i style="background:blue;width:15px;height:3px;display:inline-block"></i> Kelurahan<br>
+      <i style="background:gray;width:15px;height:3px;display:inline-block"></i> Jalan<br>
+      <i style="background:blue;width:15px;height:3px;display:inline-block"></i> Sungai
+    `;
+
+    return div;
+  };
+
+  legend.addTo(map);
+
+</script>
+
+</body>
+</html>
